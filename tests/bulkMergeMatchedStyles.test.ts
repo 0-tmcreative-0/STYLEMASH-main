@@ -24,6 +24,8 @@ function referenceRecord(name: string, styleId: string, bold: boolean): UserStyl
       underline: null,
       strike: false,
     },
+    kind: 'character',
+    listFormat: 'none',
     createdAt: 1,
     fromReferenceDoc: true,
   }
@@ -121,6 +123,39 @@ describe('bulkMergeVariantsIntoMatchingReferenceStyles', () => {
     const run = parsedDocx.documentXml.getElementsByTagNameNS(NS.w, 'r')[0]
     expect(wChild(run, 'rPr')!.getElementsByTagNameNS(NS.w, 'rStyle')).toHaveLength(0)
     expect(wChild(wChild(run, 'rPr'), 'b')).not.toBeNull()
+  })
+
+  it('applies a paragraph-kind record via w:pStyle, never w:rStyle', () => {
+    // A Document B style that carries list numbering materializes as a
+    // paragraph-kind record (referenceDocStyles.ts). Pointing a run's
+    // w:rStyle at a <w:style w:type="paragraph"> is invalid OOXML - Word
+    // can't resolve it - so this must take mergeParagraphStyle()'s path,
+    // the same way the single-target "Merge N selected here" flow does.
+    const parsedDocx = makeParsedDocx({
+      documentXml: `<w:document ${W}><w:body>
+        <w:p><w:pPr><w:pStyle w:val="OldBullets"/></w:pPr><w:r><w:t>item</w:t></w:r></w:p>
+      </w:body></w:document>`,
+      stylesXml: `<w:styles ${W}>
+        <w:style w:type="paragraph" w:styleId="OldBullets"><w:name w:val="My List"/></w:style>
+        <w:style w:type="paragraph" w:styleId="RefList"><w:name w:val="My List"/></w:style>
+      </w:styles>`,
+    })
+    const styleReport = buildStyleReport(parsedDocx)
+    const record: UserStyleRecord = {
+      ...referenceRecord('My List', 'RefList', false),
+      kind: 'paragraph',
+      listFormat: 'bullet',
+    }
+    const allVariantIds = new Set(styleReport.flatMap((e) => e.variants).map((v) => v.id))
+
+    bulkMergeVariantsIntoMatchingReferenceStyles(parsedDocx, styleReport, allVariantIds, [record])
+
+    const paragraph = parsedDocx.documentXml.getElementsByTagNameNS(NS.w, 'p')[0]
+    const pStyle = wChild(wChild(paragraph, 'pPr'), 'pStyle')
+    expect(pStyle!.getAttributeNS(NS.w, 'val')).toBe('RefList')
+
+    const run = parsedDocx.documentXml.getElementsByTagNameNS(NS.w, 'r')[0]
+    expect(wChild(run, 'rPr')?.getElementsByTagNameNS(NS.w, 'rStyle') ?? []).toHaveLength(0)
   })
 
   it('is a no-op when there are no Document-B-derived records', () => {

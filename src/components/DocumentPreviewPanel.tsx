@@ -4,7 +4,7 @@ import type { ReferenceDocState } from '../hooks/useDocxWorkspace'
 import type { FormattingSignature, ParsedDocx, StyleEntity } from '../types/ooxml'
 import { NS } from '../lib/ooxml/constants'
 import type { ParagraphMarker } from '../lib/ooxml/numbering'
-import { collectRunRefsForVariantIds, getRunText } from '../lib/ooxml/styleReport'
+import { collectRunRefsForVariantIds, getOwnRuns, getRunText } from '../lib/ooxml/styleReport'
 import { signatureToCss } from '../lib/signatureToCss'
 import { InfoTooltip } from './InfoTooltip'
 import { SaveButton } from './SaveButton'
@@ -114,7 +114,10 @@ export function DocumentPreviewPanel({
     const paras: PreviewParagraph[] = []
     for (let i = 0; i < paragraphEls.length; i++) {
       const paragraphEl = paragraphEls[i]
-      const runEls = paragraphEl.getElementsByTagNameNS(NS.w, 'r')
+      // Same "runs this paragraph actually owns" rule the Style Report
+      // groups by, so a text box's text renders once (under its own
+      // paragraph) rather than twice - see styleReport.ts#getOwnRuns.
+      const runEls = getOwnRuns(paragraphEl)
       const runs: PreviewRun[] = []
       for (let j = 0; j < runEls.length; j++) {
         const runEl = runEls[j]

@@ -131,7 +131,14 @@ describe('computeMergeProgress', () => {
 
     const report = buildStyleReport(makeParsedDocx({ documentXml, stylesXml }))
     const userStyles: UserStyleRecord[] = [
-      { styleId: 'Tracked', name: 'Tracked', targetSignature: NEUTRAL_SIGNATURE, createdAt: 1 },
+      {
+        styleId: 'Tracked',
+        name: 'Tracked',
+        targetSignature: NEUTRAL_SIGNATURE,
+        kind: 'character',
+        listFormat: 'none',
+        createdAt: 1,
+      },
     ]
 
     const progress = computeMergeProgress(report, userStyles)
@@ -214,6 +221,27 @@ describe('filterUnmergedEntities', () => {
     ]
 
     expect(filterUnmergedEntities(report, userStyles)).toHaveLength(0)
+  })
+
+  it('counts a run inside a text box once, under the text box\'s own paragraph', () => {
+    // A w:drawing text box nests whole <w:p> elements inside the paragraph
+    // it's anchored in, so a naive descendant scan attributes its runs to
+    // both paragraphs at once - see styleReport.ts#getOwnRuns.
+    const documentXml = `<w:document ${W} xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><w:body>
+      <w:p>
+        <w:r><w:t>Anchor paragraph</w:t></w:r>
+        <w:r><w:drawing><wps:txbx><w:txbxContent>
+          <w:p><w:r><w:rPr><w:b/></w:rPr><w:t>Inside the box</w:t></w:r></w:p>
+        </w:txbxContent></wps:txbx></w:drawing></w:r>
+      </w:p>
+    </w:body></w:document>`
+
+    const report = buildStyleReport(makeParsedDocx({ documentXml }))
+    const runElements = report.flatMap((e) => e.variants.flatMap((v) => v.runRefs.map((r) => r.runElement)))
+    const totalOccurrences = report.reduce((sum, e) => sum + e.occurrenceCount, 0)
+
+    expect(totalOccurrences).toBe(2)
+    expect(new Set(runElements).size).toBe(2)
   })
 
   it('leaves entities untouched (same object) when nothing in them is merged', () => {

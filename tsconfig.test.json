@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.test.tsbuildinfo",
+    // Vitest's own globals/matchers, on top of the app project's DOM types.
+    "types": ["vite/client", "vitest/globals"]
+  },
+  // The test suite was previously outside every tsconfig project, so `npm run
+  // build` never type-checked it and fixtures could (and did) silently drift
+  // out of sync with the types they claim to be - e.g. UserStyleRecord
+  // literals missing `kind`/`listFormat`.
+  "include": ["tests", "src"]
+}

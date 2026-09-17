@@ -30,6 +30,40 @@ export function getRunText(runEl: Element): string {
   return text
 }
 
+/** The nearest ancestor `<w:p>` of `el`, or null if it has none. */
+function nearestParagraph(el: Element): Element | null {
+  let node: Node | null = el.parentNode
+  while (node) {
+    if (node.nodeType === 1) {
+      const element = node as Element
+      if (element.namespaceURI === NS.w && element.localName === 'p') return element
+    }
+    node = node.parentNode
+  }
+  return null
+}
+
+/** Every `<w:r>` that belongs to `paragraphEl` itself.
+ *
+ * Deliberately a *descendant* search rather than a direct-child one, so runs
+ * wrapped in w:hyperlink, w:ins/w:del (tracked changes), or w:sdt content
+ * are picked up too without special-casing each wrapper - but filtered back
+ * down to the runs whose nearest ancestor paragraph is this one. That last
+ * step matters because a `<w:p>` can legitimately contain whole other
+ * paragraphs: a text box (w:drawing → … → w:txbxContent → w:p) is the
+ * common case. Without the filter, every run inside a text box would be
+ * counted once for the text box's own paragraph and again for the
+ * paragraph the text box is anchored in - inflating occurrence counts and
+ * rendering that text twice in the Document Preview. */
+export function getOwnRuns(paragraphEl: Element): Element[] {
+  const out: Element[] = []
+  const runs = paragraphEl.getElementsByTagNameNS(NS.w, 'r')
+  for (let i = 0; i < runs.length; i++) {
+    if (nearestParagraph(runs[i]) === paragraphEl) out.push(runs[i])
+  }
+  return out
+}
+
 function truncate(text: string, maxLength: number): string {
   return text.length > maxLength ? `${text.slice(0, maxLength)}…` : text
 }
@@ -73,12 +107,7 @@ export function buildStyleReport(parsedDocx: ParsedDocx): StyleEntity[] {
   for (let i = 0; i < paragraphs.length; i++) {
     const paragraphEl = paragraphs[i]
     const isListItem = paragraphMarkers.has(paragraphEl)
-    // Descendant (not direct-child) lookup so runs wrapped in w:hyperlink,
-    // w:ins/w:del (tracked changes), or w:sdt content are picked up too,
-    // without special-casing each wrapper element.
-    const runs = paragraphEl.getElementsByTagNameNS(NS.w, 'r')
-    for (let j = 0; j < runs.length; j++) {
-      const runEl = runs[j]
+    for (const runEl of getOwnRuns(paragraphEl)) {
       const text = getRunText(runEl)
       if (text.length === 0) continue
 

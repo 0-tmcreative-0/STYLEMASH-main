@@ -1,5 +1,5 @@
 import type { ParsedDocx, RunRef, StyleEntity, UserStyleRecord } from '../../types/ooxml'
-import { mergeStyles } from './mergeStyles'
+import { mergeParagraphStyle, mergeStyles } from './mergeStyles'
 
 /** Every currently-selectable Style Report variant id whose visible origin
  * is a named style (character or paragraph) sharing its name with a style
@@ -67,6 +67,25 @@ export function bulkMergeVariantsIntoMatchingReferenceStyles(
   }
 
   for (const { record, runRefs } of buckets.values()) {
-    mergeStyles(parsedDocx, runRefs, record.targetSignature, record.name, record.styleId)
+    // Dispatch on the record's own kind, exactly as the single-target
+    // "Merge N selected here" flow does (see useDocxWorkspace's
+    // mergeSelectedIntoTarget): a paragraph-kind record - which is what a
+    // Document B list style materializes as (referenceDocStyles.ts) - is a
+    // <w:style w:type="paragraph">, and pointing a run's w:rStyle at one is
+    // invalid OOXML: Word can't resolve it, so the merge would silently do
+    // nothing visible while also leaving the paragraph on its old w:pStyle
+    // (and therefore its old list, or none).
+    if (record.kind === 'paragraph') {
+      mergeParagraphStyle(
+        parsedDocx,
+        runRefs,
+        record.targetSignature,
+        record.name,
+        record.listFormat,
+        record.styleId,
+      )
+    } else {
+      mergeStyles(parsedDocx, runRefs, record.targetSignature, record.name, record.styleId)
+    }
   }
 }
