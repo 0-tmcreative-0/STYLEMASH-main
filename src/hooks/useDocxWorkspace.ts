@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useReducer, useRef } from 'react'
+import { useCallback, useMemo, useReducer, useRef, useState } from 'react'
 import type {
   FormattingSignature,
   ListFormat,
@@ -13,7 +13,7 @@ import {
   findVariantIdsMatchingReferenceStyleNames,
 } from '../lib/ooxml/bulkMergeMatchedStyles'
 import { buildContentMergedDocx, type ContentMergeOptions } from '../lib/ooxml/contentMerge'
-import { addDefaultStyles } from '../lib/ooxml/defaultStyles'
+import { addDefaultStyles, DEFAULT_STYLES } from '../lib/ooxml/defaultStyles'
 import { mergeParagraphStyle, mergeStyles, removeStyleById } from '../lib/ooxml/mergeStyles'
 import { parseDocx } from '../lib/ooxml/parseDocx'
 import {
@@ -455,6 +455,29 @@ export function useDocxWorkspace() {
   const stateRef = useRef(state)
   stateRef.current = state
 
+  // Which of DEFAULT_STYLES the "Customise your own style file" panel has
+  // left checked - deliberately its own useState rather than reducer state:
+  // it's a user preference about what "+ Defaults" should bring in, not
+  // something a new document load or "Mash a different file" reset should
+  // ever wipe out (the reducer's mutating actions all spread `initialState`
+  // wholesale - see FILE_LOADED/RESET above - which would otherwise silently
+  // re-check everything). Read via a ref, same pattern as stateRef, so
+  // addDefaultStylesAction below doesn't need it as a dependency.
+  const [enabledDefaultStyleNames, setEnabledDefaultStyleNames] = useState<Set<string>>(
+    () => new Set(DEFAULT_STYLES.map((d) => d.name)),
+  )
+  const enabledDefaultStyleNamesRef = useRef(enabledDefaultStyleNames)
+  enabledDefaultStyleNamesRef.current = enabledDefaultStyleNames
+
+  const toggleDefaultStyleEnabled = useCallback((name: string) => {
+    setEnabledDefaultStyleNames((prev) => {
+      const next = new Set(prev)
+      if (next.has(name)) next.delete(name)
+      else next.add(name)
+      return next
+    })
+  }, [])
+
   const loadFile = useCallback(async (file: File) => {
     dispatch({ type: 'LOADING_STARTED' })
     try {
@@ -739,7 +762,11 @@ export function useDocxWorkspace() {
   const addDefaultStylesAction = useCallback(() => {
     const current = stateRef.current
     if (!current.parsedDocx) return
-    const userStyles = addDefaultStyles(current.parsedDocx, current.userStyles)
+    const userStyles = addDefaultStyles(
+      current.parsedDocx,
+      current.userStyles,
+      enabledDefaultStyleNamesRef.current,
+    )
     dispatch({
       type: 'DEFAULT_STYLES_ADDED',
       parsedDocx: { ...current.parsedDocx },
@@ -802,6 +829,9 @@ export function useDocxWorkspace() {
     state,
     selection,
     activeEditVariant,
+    // Independent of `state` (see the useState next to stateRef above) -
+    // survives a file load/reset, unlike everything under `state`.
+    enabledDefaultStyleNames,
     actions: {
       loadFile,
       toggleSelectVariant,
@@ -824,6 +854,7 @@ export function useDocxWorkspace() {
       addDefaultStyles: addDefaultStylesAction,
       clearUserStyles,
       undo,
+      toggleDefaultStyleEnabled,
     },
   }
 }

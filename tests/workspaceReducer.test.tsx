@@ -136,6 +136,35 @@ describe('useDocxWorkspace under StrictMode', () => {
     w.cleanup()
   })
 
+  it('enabledDefaultStyleNames starts with every DEFAULT_STYLES name checked', async () => {
+    const w = await mountWorkspace()
+    expect(w.api.enabledDefaultStyleNames).toEqual(new Set(DEFAULT_STYLES.map((d) => d.name)))
+    w.cleanup()
+  })
+
+  it('unchecking a style in "Customise your own style file" excludes it from "+ Defaults"', async () => {
+    const w = await mountWorkspace()
+    act(() => w.api.actions.toggleDefaultStyleEnabled('caption'))
+    expect(w.api.enabledDefaultStyleNames.has('caption')).toBe(false)
+
+    act(() => w.api.actions.addDefaultStyles())
+
+    expect(w.api.state.userStyles.map((r) => r.name)).not.toContain('caption')
+    expect(w.api.state.userStyles).toHaveLength(DEFAULT_STYLES.length - 1)
+    w.cleanup()
+  })
+
+  it('enabledDefaultStyleNames survives "Mash a different file" (reset) - it is a preference, not document state', async () => {
+    const w = await mountWorkspace()
+    act(() => w.api.actions.toggleDefaultStyleEnabled('caption'))
+
+    act(() => w.api.actions.reset())
+
+    expect(w.api.state.status).toBe('empty')
+    expect(w.api.enabledDefaultStyleNames.has('caption')).toBe(false)
+    w.cleanup()
+  })
+
   it('undo restores the document and the user-style list from before a merge', async () => {
     const w = await mountWorkspace()
     const variantId = w.api.state.styleReport[0].variants[0].id

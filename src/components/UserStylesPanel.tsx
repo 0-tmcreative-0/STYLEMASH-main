@@ -4,6 +4,8 @@ import type { ParagraphMarker } from '../lib/ooxml/numbering'
 import { countOccurrencesForStyleId } from '../lib/ooxml/styleReport'
 import { signatureToCss } from '../lib/signatureToCss'
 import { AttachReferenceDocButton } from './AttachReferenceDocButton'
+import { DefaultStylesChecklist } from './DefaultStylesChecklist'
+import { FaCheckbox } from './FaCheckbox'
 import { InfoTooltip } from './InfoTooltip'
 
 /** Finds a representative list marker for a User-Created style, the same
@@ -60,9 +62,9 @@ interface UserStylesPanelProps {
   /** Surfaced here (not just in MergeDialog) since MERGE_SELECTED_INTO_TARGET
    * has no dialog of its own to show it in. */
   mergeError: string | null
-  /** Drives the footer's "Attach Document B (optional)" button while
-   * nothing's attached, and its "Remove Document B" button once one is -
-   * same footer slot either way, just swapping which button occupies it. */
+  /** Drives the footer's "Attach custom Word styles" button while nothing's
+   * attached, and its "Remove Document B" button once one is - same footer
+   * slot either way, just swapping which button occupies it. */
   referenceDoc: ReferenceDocState
   onAttachReferenceDoc: (file: File) => void
   onRemoveReferenceDoc: () => void
@@ -70,6 +72,12 @@ interface UserStylesPanelProps {
    * go. Pushes its own undo snapshot (see useDocxWorkspace), so an accidental
    * click is recoverable via the Undo button. */
   onClearUserStyles: () => void
+  /** Whether AppHeader's "Customise your own style file" button has this
+   * panel's DefaultStylesChecklist expanded - see that component's own doc
+   * comment for why it lives here rather than in a separate modal. */
+  isCustomizeOpen: boolean
+  enabledDefaultStyleNames: Set<string>
+  onToggleDefaultStyleEnabled: (name: string) => void
 }
 
 /** Right-hand panel: the named styles StyleMash has created via merges
@@ -101,10 +109,13 @@ export function UserStylesPanel({
   onAttachReferenceDoc,
   onRemoveReferenceDoc,
   onClearUserStyles,
+  isCustomizeOpen,
+  enabledDefaultStyleNames,
+  onToggleDefaultStyleEnabled,
 }: UserStylesPanelProps) {
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white">
-      <div className="flex items-start justify-between gap-2 border-b border-slate-200 bg-slate-800 px-4 py-4">
+      <div className="flex min-h-15 items-start justify-between gap-2 border-b border-slate-200 bg-slate-800 px-4 py-4">
         <div>
           <h2 className="flex items-center gap-1.5 text-sm font-semibold text-slate-200">
             New Styles <span className="font-normal text-slate-400">({userStyles.length})</span>
@@ -115,7 +126,7 @@ export function UserStylesPanel({
           <button
             type="button"
             onClick={onAddDefaultStyles}
-            className="rounded-md border border-indigo-200 px-2 py-1 text-xs font-medium text-slate-300 hover:bg-slate-600"
+            className="rounded-md bg-orange-600 px-2 py-1 text-xs font-medium text-white hover:bg-orange-700"
           >
             + Defaults
           </button>
@@ -126,6 +137,27 @@ export function UserStylesPanel({
           >
             + New Style
           </button>
+        </div>
+      </div>
+
+      {/* AppHeader's "Customise your own style file" button toggles this -
+          same 0fr/1fr grid-template-rows animation DefaultStylesChecklist's
+          own category sections use, so the whole panel doesn't just snap
+          open. `shrink-0` keeps the styles list below from being squeezed
+          as this expands rather than both fighting over the same flex
+          space. */}
+      <div
+        className={`grid shrink-0 border-b border-slate-200 bg-slate-50 transition-[grid-template-rows] duration-300 ease-in-out ${
+          isCustomizeOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+        }`}
+      >
+        <div className="overflow-hidden">
+          <div className="px-4 py-3">
+            <DefaultStylesChecklist
+              enabledNames={enabledDefaultStyleNames}
+              onToggle={onToggleDefaultStyleEnabled}
+            />
+          </div>
         </div>
       </div>
 
@@ -149,10 +181,22 @@ export function UserStylesPanel({
               onClick={() => onToggleSelectTarget(record.styleId)}
               className={`flex cursor-pointer items-start gap-3 border-b border-l-4 border-slate-200 px-4 py-3 transition-colors last:border-b-0 ${
                 isTarget
-                  ? 'border-l-indigo-500 bg-indigo-200 hover:bg-indigo-300 active:bg-indigo-400'
-                  : 'border-l-transparent hover:border-l-indigo-300 hover:bg-slate-50 active:bg-slate-100'
+                  ? // Deliberately a different accent (amber, not the Current
+                    // Styles list's indigo) - loud on purpose, as a stopgap so
+                    // "selected here" and "selected over there" read as
+                    // visually distinct lists rather than one shared
+                    // selection. Revisit with a more considered color later.
+                    'border-l-amber-500 bg-amber-200 hover:bg-amber-300 active:bg-amber-400'
+                  : 'border-l-transparent hover:border-l-amber-300 hover:bg-slate-50 active:bg-slate-100'
               }`}
             >
+              <FaCheckbox
+                checked={isTarget}
+                onToggle={() => onToggleSelectTarget(record.styleId)}
+                label={`Select "${record.name}" as the merge target`}
+                className="mt-0.5"
+              />
+
               <div className="min-w-0 flex-1">
                 <p className="truncate text-base font-medium" style={signatureToCss(record.targetSignature)}>
                   {markerText && <span className="mr-1 text-slate-400">{markerText}</span>}

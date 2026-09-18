@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import { AppFooter } from './components/AppFooter'
 import { AppHeader } from './components/AppHeader'
 import { ContentMergeDialog } from './components/ContentMergeDialog'
@@ -23,7 +23,14 @@ import { computeMergeProgress, filterUnmergedEntities } from './lib/ooxml/styleR
  * view so *that* remount/fade is scoped to just the content that's actually
  * changing. */
 function App() {
-  const { state, selection, activeEditVariant, actions } = useDocxWorkspace()
+  const { state, selection, activeEditVariant, enabledDefaultStyleNames, actions } = useDocxWorkspace()
+  // Whether UserStylesPanel's DefaultStylesChecklist is expanded - toggled
+  // by AppHeader's "Customise your own style file" button, a sibling of the
+  // panel it controls, so this lives here rather than in either component.
+  // Plain UI state, not workspace state - resetting to a new file shouldn't
+  // need to reopen/reclose it deliberately either way, so it's simply left
+  // as-is across a reset rather than wired into RESET.
+  const [isCustomizeOpen, setIsCustomizeOpen] = useState(false)
 
   const reuseRecord = state.mergeDialogReuseStyleId
     ? (state.userStyles.find((r) => r.styleId === state.mergeDialogReuseStyleId) ?? null)
@@ -46,9 +53,28 @@ function App() {
     [state.parsedDocx],
   )
 
+  // "Mash it": a style already picked in New Styles (selectedTargetStyleId)
+  // means the user has already told us where these should go - merge there
+  // immediately, the same as UserStylesPanel's own inline "Merge N selected
+  // here" button does, with no dialog detour. Only fall back to
+  // MergeDialog (define a brand-new style, or pick one there instead) when
+  // no target is selected - "Mash it" itself stays disabled until at least
+  // one Style Report entry is selected either way (see StyleReportPanel).
+  const onMashIt = () => {
+    if (state.selectedTargetStyleId) {
+      actions.mergeSelectedIntoTarget()
+    } else {
+      actions.openMergeDialog()
+    }
+  }
+
   return (
     <div className="flex h-full flex-col bg-slate-50">
-      <AppHeader filename={isLoaded ? (state.parsedDocx?.originalFilename ?? null) : null} />
+      <AppHeader
+        filename={isLoaded ? (state.parsedDocx?.originalFilename ?? null) : null}
+        isCustomizeOpen={isCustomizeOpen}
+        onToggleCustomize={() => setIsCustomizeOpen((v) => !v)}
+      />
 
       {isLoaded ? (
         <div key="workspace" className="page-transition flex min-h-0 flex-1 flex-col">
@@ -69,13 +95,16 @@ function App() {
                 selectedIds={state.selectedVariantIds}
                 paragraphMarkers={paragraphMarkers}
                 onToggleSelect={actions.toggleSelectVariant}
-                onMergeSelected={() => actions.openMergeDialog()}
+                onMergeSelected={onMashIt}
                 hasReferenceStyles={importedStyleCount > 0}
                 bulkMergeError={state.bulkMergeError}
                 onSelectMatchingReferenceStyles={actions.selectVariantsMatchingReferenceStyles}
                 onBulkMergeMatched={actions.bulkMergeMatchedToReference}
                 mergeProgress={mergeProgress}
                 onSave={actions.save}
+                isSaving={state.isSaving}
+                canUndo={state.undoStack.length > 0}
+                onUndo={actions.undo}
                 onRipAnotherFile={actions.reset}
               />
             </div>
@@ -96,6 +125,9 @@ function App() {
                 onAttachReferenceDoc={actions.loadReferenceDoc}
                 onRemoveReferenceDoc={actions.removeReferenceDoc}
                 onClearUserStyles={actions.clearUserStyles}
+                isCustomizeOpen={isCustomizeOpen}
+                enabledDefaultStyleNames={enabledDefaultStyleNames}
+                onToggleDefaultStyleEnabled={actions.toggleDefaultStyleEnabled}
               />
             </div>
             <div className="col-span-2 flex h-full min-h-0 min-w-0 flex-col">
@@ -107,10 +139,6 @@ function App() {
                 referenceDoc={state.referenceDoc}
                 isMergingContent={state.isMergingContent}
                 onOpenContentMerge={actions.openContentMergeDialog}
-                isSaving={state.isSaving}
-                onSave={actions.save}
-                canUndo={state.undoStack.length > 0}
-                onUndo={actions.undo}
               />
             </div>
           </main>

@@ -3,7 +3,9 @@ import type { ParagraphMarker } from '../lib/ooxml/numbering'
 import { signatureToCss } from '../lib/signatureToCss'
 import { describeSignature } from '../lib/styleDescriptions'
 import { InfoTooltip } from './InfoTooltip'
+import { SaveButton } from './SaveButton'
 import { StyleVariantRow } from './StyleVariantRow'
+import { UndoButton } from './UndoButton'
 
 /** A variant's list marker is taken from its first occurrence's paragraph -
  * the same paragraph that produced `variant.sampleText` (see
@@ -33,10 +35,16 @@ interface StyleReportPanelProps {
   /** How many Style Report entries are already merged into a User-Created
    * style vs. still outstanding - see styleReport.ts#computeMergeProgress. */
   mergeProgress: { total: number; merged: number; remaining: number }
-  /** Same action as the "Save your work locally" button - offered again
-   * here once every entry is matched, so there's a next step right where
-   * the (now-empty-looking) list used to be. */
+  /** Backs both the footer's SaveButton and the inline "Save your work" link
+   * shown once every entry is matched (that link's the same action offered
+   * again right where the now-empty-looking list used to be). */
   onSave: () => void
+  isSaving: boolean
+  /** Drives the footer's Undo button, immediately left of "Mash it" - see
+   * useDocxWorkspace's undoStack. Moved here (from DocumentPreviewPanel)
+   * since undoing a merge and doing the next one are the same gesture. */
+  canUndo: boolean
+  onUndo: () => void
   /** Drives this panel's own "Mash a different file" header button, plus
    * the equivalent link in the empty state below. */
   onRipAnotherFile: () => void
@@ -62,6 +70,9 @@ export function StyleReportPanel({
   onBulkMergeMatched,
   mergeProgress,
   onSave,
+  isSaving,
+  canUndo,
+  onUndo,
   onRipAnotherFile,
 }: StyleReportPanelProps) {
   const percentMerged =
@@ -69,7 +80,7 @@ export function StyleReportPanel({
   const allMatched = mergeProgress.total > 0 && mergeProgress.remaining === 0
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white">
-      <div className="flex items-start justify-between gap-2 border-b border-slate-200 bg-slate-800 px-4 py-4">
+      <div className="flex min-h-15 items-start justify-between gap-2 border-b border-slate-200 bg-slate-800 px-4 py-4">
         <h2 className="flex items-center gap-1.5 text-sm font-semibold text-slate-200">
           Current styles <span className="font-normal text-slate-400">({styleReport.length})</span>
           <InfoTooltip text="Select items from this list and you'll see them in your document. Now either merge these with a newly created style or one from an uploaded reference Word file in the &quot;New&quot; styles list." />
@@ -207,14 +218,27 @@ export function StyleReportPanel({
           </div>
         </div>
 
-        <button
-          type="button"
-          disabled={selectedIds.size === 0}
-          onClick={onMergeSelected}
-          className="w-full rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white enabled:hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-300"
-        >
-          Mash it {selectedIds.size > 0 ? `(${selectedIds.size})` : ''}
-        </button>
+        {/* Undo sits immediately left of "Mash it" - undoing the last merge
+            and staging the next one are the same gesture, so they share a
+            row. Save is a full-width row of its own below, matching this
+            row's combined width, since it's a step you take once you're
+            done merging rather than mid-merge. */}
+        <div className="flex gap-2">
+          <UndoButton disabled={!canUndo} onUndo={onUndo} />
+          <button
+            type="button"
+            disabled={selectedIds.size === 0}
+            onClick={onMergeSelected}
+            className="flex-1 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white enabled:hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+          >
+            Mash it {selectedIds.size > 0 ? `(${selectedIds.size})` : ''}
+          </button>
+        </div>
+        {/* Never gated on document state here (unlike its old home in
+            DocumentPreviewPanel's header) - this panel only ever mounts once
+            a document is loaded (see App.tsx), so there's always something
+            to save; SaveButton's own `isSaving` disables it mid-download. */}
+        <SaveButton disabled={false} isSaving={isSaving} onSave={onSave} className="mt-2 w-full" />
       </div>
     </div>
   )

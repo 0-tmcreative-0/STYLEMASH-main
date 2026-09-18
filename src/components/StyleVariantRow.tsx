@@ -2,6 +2,7 @@ import type { FormattingSignature, StyleEntityVariant } from '../types/ooxml'
 import type { ParagraphMarker } from '../lib/ooxml/numbering'
 import { signatureToCss } from '../lib/signatureToCss'
 import { describeOrigin, describeSignature } from '../lib/styleDescriptions'
+import { FaCheckbox } from './FaCheckbox'
 
 interface StyleVariantRowProps {
   signature: FormattingSignature
@@ -45,17 +46,16 @@ export function StyleVariantRow({
           : 'border-l-transparent bg-white hover:bg-slate-50 active:bg-slate-100'
       }`}
     >
-      {/* Visually hidden, not removed - the row's highlight color is the
-          visible selected-state indicator, but this keeps the row
-          keyboard-focusable/toggleable and announced correctly by screen
-          readers. */}
-      <input
-        type="checkbox"
+      {/* Same FaCheckbox glyph used by the "Customise your own style file"
+          panel's per-style checkboxes (see FaCheckbox's own doc comment) -
+          the row's highlight color was already the selected-state
+          indicator, this just makes that state legible at a glance too,
+          consistent with every other checkbox-driven list in the app. */}
+      <FaCheckbox
         checked={selected}
-        onChange={onToggleSelect}
-        onClick={(e) => e.stopPropagation()}
-        className="sr-only"
-        aria-label={`Select: ${describeOrigin(variant.origin)}`}
+        onToggle={onToggleSelect}
+        label={`Select: ${describeOrigin(variant.origin)}`}
+        className="mt-0.5"
       />
 
       <div className="min-w-0 flex-1">

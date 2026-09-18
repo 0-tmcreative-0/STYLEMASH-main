@@ -1,14 +1,12 @@
 import type { CSSProperties } from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReferenceDocState } from '../hooks/useDocxWorkspace'
-import type { FormattingSignature, ParsedDocx, StyleEntity } from '../types/ooxml'
+import type { ParsedDocx, StyleEntity } from '../types/ooxml'
 import { NS } from '../lib/ooxml/constants'
 import type { ParagraphMarker } from '../lib/ooxml/numbering'
 import { collectRunRefsForVariantIds, getOwnRuns, getRunText } from '../lib/ooxml/styleReport'
 import { signatureToCss } from '../lib/signatureToCss'
 import { InfoTooltip } from './InfoTooltip'
-import { SaveButton } from './SaveButton'
-import { UndoButton } from './UndoButton'
 
 interface DocumentPreviewPanelProps {
   parsedDocx: ParsedDocx | null
@@ -27,11 +25,6 @@ interface DocumentPreviewPanelProps {
   referenceDoc: ReferenceDocState
   isMergingContent: boolean
   onOpenContentMerge: () => void
-  isSaving: boolean
-  onSave: () => void
-  /** Drives the header's Undo button - see useDocxWorkspace's undoStack. */
-  canUndo: boolean
-  onUndo: () => void
 }
 
 interface PreviewRun {
@@ -48,24 +41,6 @@ interface PreviewParagraph {
 }
 
 const FLASH_DURATION_MS = 1400
-
-/** signatureToCss() renders the document's actual font name verbatim, which
- * is fine for the Style Report's tiny sample lines but looks broken here
- * where a whole document's worth of text is rendered: most custom/corporate
- * fonts aren't installed in a browser, so the browser silently falls back to
- * its generic default anyway. Layering standard web-safe fallbacks after the
- * real name gets closer to how the font would actually look, and keeps the
- * preview rendering consistently instead of occasionally substituting an
- * unrelated system font. */
-function previewCss(signature: FormattingSignature): CSSProperties {
-  const family = signature.fontFamily?.trim()
-  return {
-    ...signatureToCss(signature),
-    fontFamily: family
-      ? `"${family}", Calibri, "Segoe UI", Arial, sans-serif`
-      : 'Calibri, "Segoe UI", Arial, sans-serif',
-  }
-}
 
 /** "Merge content into Document B" still needs more work before it's ready
  * for users - the trigger below stays fully wired up (state, handler,
@@ -87,10 +62,6 @@ export function DocumentPreviewPanel({
   referenceDoc,
   isMergingContent,
   onOpenContentMerge,
-  isSaving,
-  onSave,
-  canUndo,
-  onUndo,
 }: DocumentPreviewPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const runNodesRef = useRef(new Map<Element, HTMLElement>())
@@ -100,7 +71,7 @@ export function DocumentPreviewPanel({
   const runCss = useMemo(() => {
     const map = new Map<Element, CSSProperties>()
     for (const entity of styleReport) {
-      const css = previewCss(entity.signature)
+      const css = signatureToCss(entity.signature)
       for (const variant of entity.variants) {
         for (const ref of variant.runRefs) map.set(ref.runElement, css)
       }
@@ -183,17 +154,13 @@ export function DocumentPreviewPanel({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white">
-      <div className="flex items-start justify-between gap-2 border-b border-slate-200 bg-slate-50 px-4 py-4">
+      <div className="flex min-h-15 items-start justify-between gap-2 border-b border-slate-200 bg-slate-50 px-4 py-4">
         <h2 className="flex items-center gap-1.5 text-sm font-semibold text-slate-700">
           Document Preview
           <InfoTooltip
             text={`${parsedDocx?.originalFilename ?? 'Live preview'} — This is a "style only" preview of your document. It will not display your page flow correctly but that's OK, that's not what this tool is for. To merge your style with approved styles, use the panels to the left.`}
           />
         </h2>
-        <div className="flex shrink-0 items-center gap-2">
-          <UndoButton disabled={!canUndo} onUndo={onUndo} />
-          <SaveButton disabled={!parsedDocx} isSaving={isSaving} onSave={onSave} />
-        </div>
       </div>
 
       <div ref={containerRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
